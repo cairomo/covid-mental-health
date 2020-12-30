@@ -1,8 +1,6 @@
-# US opioid epidemic dataset and Dash app
+# Covid-19 effects on mental health dataset and Dash app
 
-Poison induced death data was downloaded from [CDC Wonder](dash_app_screencast.gif), using cause-of-death codes X40–X44 (unintentional), X60–X64 (suicide), X85 (homicide), or Y10–Y14 (undetermined intent).
-
-[View the Dash app](https://dash-playground.plotly.host/dash-opioid-epidemic/)
+COVID-19 data was downloaded from [CDC](https://data.cdc.gov/), YouGov data was downloaded from [YouGov Covid-19 tracker](https://github.com/YouGov-Data/covid-19-tracker)
 
 ## Getting Started
 
@@ -12,6 +10,10 @@ First create a virtual environment with conda or venv inside a temp folder, then
 
 ```
 virtualenv venv
+
+# or using conda
+conda create --name ds4a py36 python=3.6
+conda activate ds4a
 
 # Windows
 venv\Scripts\activate
@@ -24,8 +26,8 @@ Clone the git repo, then install the requirements with pip
 
 ```
 
-git clone https://github.com/plotly/dash-sample-apps
-cd dash-sample-apps/apps/dash-opioid-epidemic
+git clone https://github.com/cairomo/covid-mental-health
+cd covid-mental-health
 pip install -r requirements.txt
 
 ```
@@ -38,6 +40,4 @@ python app.py
 
 ```
 
-![plotly-dash-screencast](assets/app_screencast.gif)
-
-Dash app inspired by [this Tableau dashboard](https://www.cdc.gov/nchs/data-visualization/drug-poisoning-mortality/)
+App based on [this dash smaple app](https://github.com/plotly/dash-sample-apps/tree/master/apps/dash-opioid-epidemic)
