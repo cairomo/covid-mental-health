@@ -12,7 +12,7 @@ First create a virtual environment with conda or venv inside a temp folder, then
 virtualenv venv
 
 # or using conda
-conda create --name ds4a py36 python=3.6
+conda create --name ds4a python=3.6
 conda activate ds4a
 
 # Windows
@@ -40,4 +40,4 @@ python app.py
 
 ```
 
-App based on [this dash smaple app](https://github.com/plotly/dash-sample-apps/tree/master/apps/dash-opioid-epidemic)
+App based on [this dash sample app](https://github.com/plotly/dash-sample-apps/tree/master/apps/dash-opioid-epidemic)
