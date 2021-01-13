@@ -46,7 +46,7 @@ df_full_data["County"] = (
     df_full_data["Unnamed: 0"] + ", " + df_full_data.County.map(str)
 )
 
-df_combined = pd.read_csv(
+df_combine = pd.read_csv(
     os.path.join(
         APP_PATH, os.path.join("data", "combined.csv")
     )
@@ -112,12 +112,52 @@ mapbox_style = "mapbox://styles/plotlymapbox/cjvprkf3t1kns1cqjxuxmwixz"
 
 # static plots
 
+
+df_phq4_1=df_yougov_slim.groupby(['Week_Number','PHQ4_1']).size()
+
+df_phq4_1=df_phq4_1.reset_index()
+
+df_phq4_1=df_phq4_1.rename(columns={0:'Frequency'})
+total_1=df_yougov_slim.groupby(['Week_Number']).size().to_frame().reset_index()
+
+df_phq4_1=df_phq4_1.merge(total_1,on='Week_Number')
+df_phq4_1=df_phq4_1.rename(columns={0:'Total'})
+
+
+df_phq4_1['Relative Frequency']=df_phq4_1['Frequency']/df_phq4_1['Total']
+
+
 #PHQ4_1_slim is the results from the interpolated dataframe
 PHQ4_1 = df_yougov_slim['PHQ4_1'].groupby(df_yougov_slim.PHQ4_1).agg('count')
 df_yougov_slim.PHQ4_1 = pd.Categorical(df_yougov_slim.PHQ4_1, categories=["", "Not at all", "Several days", "More than half the days", "Nearly every day", "Prefer not to say"], ordered=True)
 pd_plot = PHQ4_1.plot(kind='bar',
                     title="PHQ4_1':'Little pleasure or interest in doing things?")
 pd_plot.update_xaxes(range=[0,5])
+
+colors=['red','blue','green','orange','grey']
+# phq4_1_g=sns.lineplot(data=df_phq4_1,x='Week_Number',y='Relative Frequency',hue='PHQ4_1',legend='full',palette=colors)
+
+phq4_1_plot = df_phq4_1.plot(kind='line',
+                        title="PHQ4_1 Response Frequency Over Time",
+                        x='Week_Number',
+                        y='Relative Frequency',
+                        color='PHQ4_1'
+    )
+
+
+freq_dist_df = pd.concat([df_combine.groupby(['PHQ4_1'])['PHQ4_1'].count(),
+                 df_combine.groupby(['PHQ4_2'])['PHQ4_2'].count(),
+                 df_combine.groupby(['PHQ4_3'])['PHQ4_3'].count(),
+                 df_combine.groupby(['PHQ4_4'])['PHQ4_4'].count()], axis=1)
+
+freq_dist_df = freq_dist_df.transpose()
+freq_dist_df.index.rename("QUESTION")
+freq_dist_df['Total'] = freq_dist_df.sum(axis=1)
+freq_dist_df_rel = freq_dist_df.div(freq_dist_df['Total'][0]).mul(100)
+freq_dist_df_rel = freq_dist_df_rel.drop(['Total'],axis=1)
+
+phq4_plot = freq_dist_df_rel.plot(kind='bar',
+                                title="overall distribution of PHQ4 question responses")
 
 #Exploring the distribution of age
 age = df_yougov_slim['age'].groupby(df_yougov_slim.age).agg('count')
@@ -143,13 +183,36 @@ app.layout = html.Div(
             ],
         ),
         html.Div(
-            id="plot-container",
+            className="row",
             children=[
-                dcc.Graph(
-                    id='correlation-map',
-                    figure=pd_plot)
-            ],
-            className="row"
+                    html.Div(
+                    id="plot-container",
+                    children=[
+                        dcc.Graph(
+                            id='correlation-map',
+                            figure=pd_plot)
+                    ],
+                    className="three columns"
+                ),
+                html.Div(
+                    id="plot-2-container",
+                    children=[
+                        dcc.Graph(
+                            id='phq4-1-plot',
+                            figure=phq4_1_plot)
+                    ],
+                    className="three columns"
+                ),
+                html.Div(
+                    id="plot-3-container",
+                    children=[
+                        dcc.Graph(
+                            id='stacked-plot',
+                            figure=phq4_plot)
+                    ],
+                    className="three columns"
+                )
+            ]
         ),
         html.Div(
             id="app-container",
@@ -183,8 +246,7 @@ app.layout = html.Div(
                             id="heatmap-container",
                             children=[
                                 html.P(
-                                    "Heatmap of age adjusted mortality rates \
-                            from poisonings in year {0}".format(
+                                    "Heatmap of COVID-19 cases in week {0}".format(
                                         min(YEARS)
                                     ),
                                     id="heatmap-title",
@@ -226,19 +288,19 @@ app.layout = html.Div(
                         dcc.Dropdown(
                             options=[
                                 {
-                                    "label": "Histogram of total number of deaths (single year)",
+                                    "label": "Histogram of total number of deaths (single week)",
                                     "value": "show_absolute_deaths_single_year",
                                 },
                                 {
-                                    "label": "Histogram of total number of deaths (1999-2016)",
+                                    "label": "Histogram of total number of deaths (2020)",
                                     "value": "absolute_deaths_all_time",
                                 },
                                 {
-                                    "label": "Age-adjusted death rate (single year)",
+                                    "label": "Age-adjusted death rate (single week)",
                                     "value": "show_death_rate_single_year",
                                 },
                                 {
-                                    "label": "Trends in age-adjusted death rate (1999-2016)",
+                                    "label": "Trends in age-adjusted death rate (2020)",
                                     "value": "death_rate_all_time",
                                 },
                             ],
@@ -355,8 +417,7 @@ def display_map(year, figure):
 
 @app.callback(Output("heatmap-title", "children"), [Input("years-slider", "value")])
 def update_map_title(year):
-    return "Heatmap of age adjusted mortality rates \
-				from poisonings in year {0}".format(
+    return "Heatmap of COVID-19 cases in week {0}".format(
         year
     )
 
