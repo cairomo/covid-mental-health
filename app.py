@@ -5,6 +5,7 @@ import re
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
+import dash_bootstrap_components as dbc
 import pandas as pd
 from dash.dependencies import Input, Output, State
 import cufflinks as cf
@@ -22,29 +23,13 @@ app = dash.Dash(
     meta_tags=[
         {"name": "viewport", "content": "width=device-width, initial-scale=1.0"}
     ],
+    external_stylesheets=[dbc.themes.BOOTSTRAP]
 )
 server = app.server
 
 # Load data
 
 APP_PATH = str(pathlib.Path(__file__).parent.resolve())
-
-df_lat_lon = pd.read_csv(
-    os.path.join(APP_PATH, os.path.join("data", "lat_lon_counties.csv"))
-)
-df_lat_lon["FIPS "] = df_lat_lon["FIPS "].apply(lambda x: str(x).zfill(5))
-
-df_full_data = pd.read_csv(
-    os.path.join(
-        APP_PATH, os.path.join("data", "age_adjusted_death_rate_no_quotes.csv")
-    )
-)
-df_full_data["County Code"] = df_full_data["County Code"].apply(
-    lambda x: str(x).zfill(5)
-)
-df_full_data["County"] = (
-    df_full_data["Unnamed: 0"] + ", " + df_full_data.County.map(str)
-)
 
 df_combine = pd.read_csv(
     os.path.join(
@@ -64,27 +49,23 @@ df_yougov_slim = pd.read_csv(
     )
 )
 
+df_country_cases = pd.read_csv(
+    os.path.join(
+        APP_PATH, os.path.join("data", "owid-covid-data.csv")
+    )
+) 
 
-YEARS = [2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015]
+df_pqcore_freq = pd.read_csv(
+    os.path.join(
+        APP_PATH, os.path.join("data", "df_pq_freq.csv")
+    )
+) 
 
-BINS = [
-    "0-2",
-    "2.1-4",
-    "4.1-6",
-    "6.1-8",
-    "8.1-10",
-    "10.1-12",
-    "12.1-14",
-    "14.1-16",
-    "16.1-18",
-    "18.1-20",
-    "20.1-22",
-    "22.1-24",
-    "24.1-26",
-    "26.1-28",
-    "28.1-30",
-    ">30",
-]
+df_pqcore_freq.drop(columns=["Unnamed: 0"], inplace=True)
+
+
+WEEKS = range(18, 41)
+
 
 DEFAULT_COLORSCALE = [
     "#f2fffb",
@@ -111,8 +92,23 @@ mapbox_access_token = "pk.eyJ1IjoicGxvdGx5bWFwYm94IiwiYSI6ImNqdnBvNDMyaTAxYzkzeW
 mapbox_style = "mapbox://styles/plotlymapbox/cjvprkf3t1kns1cqjxuxmwixz"
 
 # static plots
+core_b2=df_yougov_slim.groupby(['Week_Number','CORE_B2_4']).size()
+core_b2=core_b2.reset_index()
+core_b2=core_b2.rename(columns={0:'Frequency'})
+
+total_core=df_yougov_slim.groupby(['Week_Number']).size().to_frame().reset_index()
+
+core_b2=core_b2.merge(total_core,on='Week_Number')
+core_b2=core_b2.rename(columns={0:'Total'})
+core_b2['Relative Frequency']=core_b2['Frequency']/core_b2['Total']
+core_b2=core_b2.rename(columns={'Frequency':'CORE Frequency', 'Total': 'CORE Total','Relative Frequency':'CORE Relative Frequency'})
 
 
+weeklyNumbers = df_combine.groupby('Week_Number').mean().reset_index()
+
+covid_core_df=pd.merge(weeklyNumbers,core_b2,on='Week_Number')
+
+# -----
 df_phq4_1=df_yougov_slim.groupby(['Week_Number','PHQ4_1']).size()
 
 df_phq4_1=df_phq4_1.reset_index()
@@ -125,43 +121,9 @@ df_phq4_1=df_phq4_1.rename(columns={0:'Total'})
 
 
 df_phq4_1['Relative Frequency']=df_phq4_1['Frequency']/df_phq4_1['Total']
-
-
-#PHQ4_1_slim is the results from the interpolated dataframe
-PHQ4_1 = df_yougov_slim['PHQ4_1'].groupby(df_yougov_slim.PHQ4_1).agg('count')
-df_yougov_slim.PHQ4_1 = pd.Categorical(df_yougov_slim.PHQ4_1, categories=["", "Not at all", "Several days", "More than half the days", "Nearly every day", "Prefer not to say"], ordered=True)
-pd_plot = PHQ4_1.plot(kind='bar',
-                    title="PHQ4_1':'Little pleasure or interest in doing things?")
-pd_plot.update_xaxes(range=[0,5])
+df_phq4_1=df_phq4_1.rename(columns={'Frequency':'PHQ1 Frequency', 'Total': 'PHQ1 Total','Relative Frequency':'PHQ1 Relative Frequency'})
 
 colors=['red','blue','green','orange','grey']
-# phq4_1_g=sns.lineplot(data=df_phq4_1,x='Week_Number',y='Relative Frequency',hue='PHQ4_1',legend='full',palette=colors)
-
-phq4_1_plot = df_phq4_1.plot(kind='line',
-                        title="PHQ4_1 Response Frequency Over Time",
-                        x='Week_Number',
-                        y='Relative Frequency',
-                        color='PHQ4_1'
-    )
-
-
-freq_dist_df = pd.concat([df_combine.groupby(['PHQ4_1'])['PHQ4_1'].count(),
-                 df_combine.groupby(['PHQ4_2'])['PHQ4_2'].count(),
-                 df_combine.groupby(['PHQ4_3'])['PHQ4_3'].count(),
-                 df_combine.groupby(['PHQ4_4'])['PHQ4_4'].count()], axis=1)
-
-freq_dist_df = freq_dist_df.transpose()
-freq_dist_df.index.rename("QUESTION")
-freq_dist_df['Total'] = freq_dist_df.sum(axis=1)
-freq_dist_df_rel = freq_dist_df.div(freq_dist_df['Total'][0]).mul(100)
-freq_dist_df_rel = freq_dist_df_rel.drop(['Total'],axis=1)
-
-phq4_plot = freq_dist_df_rel.plot(kind='bar',
-                                title="overall distribution of PHQ4 question responses")
-
-#Exploring the distribution of age
-age = df_yougov_slim['age'].groupby(df_yougov_slim.age).agg('count')
-age_plot = age.plot(kind='bar', title="Distribution of Age")
 
 # App layout
 
@@ -171,7 +133,6 @@ app.layout = html.Div(
         html.Div(
             id="header",
             children=[
-                html.Img(id="logo", src=app.get_asset_url("dash-logo.png")),
                 html.H4(children="Relationship between COVID-19 stages and mental health outcomes"),
                 html.P(
                     id="description",
@@ -182,377 +143,184 @@ app.layout = html.Div(
                 ),
             ],
         ),
-        html.Div(
-            className="row",
-            children=[
-                    html.Div(
-                    id="plot-container",
-                    children=[
-                        dcc.Graph(
-                            id='correlation-map',
-                            figure=pd_plot)
-                    ],
-                    className="three columns"
-                ),
+        dbc.Row(
+            dbc.Col(
                 html.Div(
-                    id="plot-2-container",
-                    children=[
-                        dcc.Graph(
-                            id='phq4-1-plot',
-                            figure=phq4_1_plot)
-                    ],
-                    className="three columns"
-                ),
-                html.Div(
-                    id="plot-3-container",
-                    children=[
-                        dcc.Graph(
-                            id='stacked-plot',
-                            figure=phq4_plot)
-                    ],
-                    className="three columns"
+                    children = [
+                        html.Div(
+                            id="legend",
+                            children=[
+                                html.Blockquote("Responses to PHQ4 questions correspond to\
+                                 'Not at all' (1.0), 'Several days' (2.0), \
+                                 'More than half the days' (3.0), \
+                                 'Nearly every day' (4.0), \
+                                 'Prefer not to say' (99.0)")
+                            ]
+                        )
+                    ]
                 )
-            ]
-        ),
-        html.Div(
-            id="app-container",
-            children=[
-                html.Div(
-                    id="left-column",
-                    children=[
-                        html.Div(
-                            id="slider-container",
-                            children=[
-                                html.P(
-                                    id="slider-text",
-                                    children="Drag the slider to change the year:",
-                                ),
-                                dcc.Slider(
-                                    id="years-slider",
-                                    min=min(YEARS),
-                                    max=max(YEARS),
-                                    value=min(YEARS),
-                                    marks={
-                                        str(year): {
-                                            "label": str(year),
-                                            "style": {"color": "#7fafdf"},
-                                        }
-                                        for year in YEARS
-                                    },
-                                ),
-                            ],
-                        ),
-                        html.Div(
-                            id="heatmap-container",
-                            children=[
-                                html.P(
-                                    "Heatmap of COVID-19 cases in week {0}".format(
-                                        min(YEARS)
-                                    ),
-                                    id="heatmap-title",
-                                ),
-                                dcc.Graph(
-                                    id="county-choropleth",
-                                    figure=dict(
-                                        data=[
-                                            dict(
-                                                lat=df_lat_lon["Latitude "],
-                                                lon=df_lat_lon["Longitude"],
-                                                text=df_lat_lon["Hover"],
-                                                type="scattermapbox",
-                                            )
-                                        ],
-                                        layout=dict(
-                                            mapbox=dict(
-                                                layers=[],
-                                                accesstoken=mapbox_access_token,
-                                                style=mapbox_style,
-                                                center=dict(
-                                                    lat=38.72490, lon=-95.61446
-                                                ),
-                                                pitch=0,
-                                                zoom=3.5,
-                                            ),
-                                            autosize=True,
-                                        ),
-                                    ),
-                                ),
-                            ],
-                        ),
-                    ],
-                ),
-                html.Div(
-                    id="graph-container",
-                    children=[
-                        html.P(id="chart-selector", children="Select chart:"),
-                        dcc.Dropdown(
-                            options=[
-                                {
-                                    "label": "Histogram of total number of deaths (single week)",
-                                    "value": "show_absolute_deaths_single_year",
-                                },
-                                {
-                                    "label": "Histogram of total number of deaths (2020)",
-                                    "value": "absolute_deaths_all_time",
-                                },
-                                {
-                                    "label": "Age-adjusted death rate (single week)",
-                                    "value": "show_death_rate_single_year",
-                                },
-                                {
-                                    "label": "Trends in age-adjusted death rate (2020)",
-                                    "value": "death_rate_all_time",
-                                },
-                            ],
-                            value="show_death_rate_single_year",
-                            id="chart-dropdown",
-                        ),
-                        dcc.Graph(
-                            id="selected-data",
-                            figure=dict(
-                                data=[dict(x=0, y=0)],
-                                layout=dict(
-                                    paper_bgcolor="#F4F4F8",
-                                    plot_bgcolor="#F4F4F8",
-                                    autofill=True,
-                                    margin=dict(t=75, r=50, b=100, l=50),
-                                ),
-                            ),
-                        ),
-                    ],
-                ),
-            ],
-        ),
-    ],
-)
-
-
-@app.callback(
-    Output("county-choropleth", "figure"),
-    [Input("years-slider", "value")],
-    [State("county-choropleth", "figure")],
-)
-def display_map(year, figure):
-    cm = dict(zip(BINS, DEFAULT_COLORSCALE))
-
-    data = [
-        dict(
-            lat=df_lat_lon["Latitude "],
-            lon=df_lat_lon["Longitude"],
-            text=df_lat_lon["Hover"],
-            type="scattermapbox",
-            hoverinfo="text",
-            marker=dict(size=5, color="white", opacity=0),
-        )
-    ]
-
-    annotations = [
-        dict(
-            showarrow=False,
-            align="right",
-            text="<b>Age-adjusted death rate<br>per county per year</b>",
-            font=dict(color="#2cfec1"),
-            bgcolor="#1f2630",
-            x=0.95,
-            y=0.95,
-        )
-    ]
-
-    for i, bin in enumerate(reversed(BINS)):
-        color = cm[bin]
-        annotations.append(
-            dict(
-                arrowcolor=color,
-                text=bin,
-                x=0.95,
-                y=0.85 - (i / 20),
-                ax=-60,
-                ay=0,
-                arrowwidth=5,
-                arrowhead=0,
-                bgcolor="#1f2630",
-                font=dict(color="#2cfec1"),
             )
-        )
-
-    if "layout" in figure:
-        lat = figure["layout"]["mapbox"]["center"]["lat"]
-        lon = figure["layout"]["mapbox"]["center"]["lon"]
-        zoom = figure["layout"]["mapbox"]["zoom"]
-    else:
-        lat = (38.72490,)
-        lon = (-95.61446,)
-        zoom = 3.5
-
-    layout = dict(
-        mapbox=dict(
-            layers=[],
-            accesstoken=mapbox_access_token,
-            style=mapbox_style,
-            center=dict(lat=lat, lon=lon),
-            zoom=zoom,
         ),
-        hovermode="closest",
-        margin=dict(r=0, l=0, t=0, b=0),
-        annotations=annotations,
-        dragmode="lasso",
-    )
-
-    base_url = "https://raw.githubusercontent.com/jackparmer/mapbox-counties/master/"
-    for bin in BINS:
-        geo_layer = dict(
-            sourcetype="geojson",
-            source=base_url + str(year) + "/" + bin + ".geojson",
-            type="fill",
-            color=cm[bin],
-            opacity=DEFAULT_OPACITY,
-            # CHANGE THIS
-            fill=dict(outlinecolor="#afafaf"),
-        )
-        layout["mapbox"]["layers"].append(geo_layer)
-
-    fig = dict(data=data, layout=layout)
-    return fig
-
-
-@app.callback(Output("heatmap-title", "children"), [Input("years-slider", "value")])
-def update_map_title(year):
-    return "Heatmap of COVID-19 cases in week {0}".format(
-        year
-    )
-
-@app.callback(
-    Output("selected-data", "figure"),
-    [
-        Input("county-choropleth", "selectedData"),
-        Input("chart-dropdown", "value"),
-        Input("years-slider", "value"),
+        dbc.Container(
+            [
+                dbc.Row(
+                    dbc.Col(
+                        html.Div(
+                            #id="left-column",
+                            children=[
+                                html.Div(
+                                    id="slider-container",
+                                    children=[
+                                        html.P(
+                                            id="slider-text",
+                                            children="Drag the slider to change the week:",
+                                        ),
+                                        dcc.Slider(
+                                            id="week-slider",
+                                            min=min(WEEKS),
+                                            max=max(WEEKS),
+                                            value=min(WEEKS),
+                                            step=5,
+                                            marks={
+                                                str(week): {
+                                                    "label": str(week),
+                                                    "style": {"color": "#7fafdf"},
+                                                }
+                                                for week in WEEKS if (week != 25 and week != 35 and week != 33)
+                                            },
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        ),
+                        width=12
+                    )
+                ),
+                dbc.Row([
+                    dbc.Col(
+                        html.Div(
+                        id="plot-container",
+                        children=[
+                            dcc.Graph(
+                                id='correlation-map')
+                        ]
+                        ),
+                        width=6
+                    ),
+                    dbc.Col(
+                        html.Div(
+                            id="plot-3-container",
+                            children=[
+                                dcc.Graph(
+                                    id='stacked-plot')
+                            ]
+                        ),
+                        width=6
+                    )
+                ]),
+                dbc.Row(
+                    dbc.Col(
+                        html.Div(
+                            id="plot-2-container",
+                            children=[
+                                html.P(id="chart-selector", children="Select metric:"),
+                                    dcc.Dropdown(
+                                        options=[
+                                            {
+                                                "label": "CORE (happier than 2 weeks ago) rating",
+                                                "value": "core",
+                                            },
+                                            {
+                                                "label": "Cantril Ladder scores (happiness rating)",
+                                                "value": "cantril",
+                                            },
+                                            {
+                                                "label": "Employment status",
+                                                "value": "employment",
+                                            },
+                                            {
+                                                "label": "Uncontrollable worrying",
+                                                "value": "phq4_4",
+                                            },
+                                        ],
+                                        value="core",
+                                        id="chart-dropdown",
+                                    ),
+                                dcc.Graph(
+                                    id='core-plot')
+                            ],
+                        )
+                    )
+                )
+            ] # end dbc container
+        ),
     ],
 )
-def display_selected_data(selectedData, chart_dropdown, year):
-    if selectedData is None:
-        return dict(
-            data=[dict(x=0, y=0)],
-            layout=dict(
-                title="Click-drag on the map to select counties",
-                paper_bgcolor="#1f2630",
-                plot_bgcolor="#1f2630",
-                font=dict(color="#2cfec1"),
-                margin=dict(t=75, r=50, b=100, l=75),
-            ),
-        )
-    pts = selectedData["points"]
-    fips = [str(pt["text"].split("<br>")[-1]) for pt in pts]
-    for i in range(len(fips)):
-        if len(fips[i]) == 4:
-            fips[i] = "0" + fips[i]
-    dff = df_full_data[df_full_data["County Code"].isin(fips)]
-    dff = dff.sort_values("Year")
 
-    regex_pat = re.compile(r"Unreliable", flags=re.IGNORECASE)
-    dff["Age Adjusted Rate"] = dff["Age Adjusted Rate"].replace(regex_pat, 0)
 
-    if chart_dropdown != "death_rate_all_time":
-        title = "Absolute deaths per county, <b>1999-2016</b>"
-        AGGREGATE_BY = "Deaths"
-        if "show_absolute_deaths_single_year" == chart_dropdown:
-            dff = dff[dff.Year == year]
-            title = "Absolute deaths per county, <b>{0}</b>".format(year)
-        elif "show_death_rate_single_year" == chart_dropdown:
-            dff = dff[dff.Year == year]
-            title = "Age-adjusted death rate per county, <b>{0}</b>".format(year)
-            AGGREGATE_BY = "Age Adjusted Rate"
+@app.callback(Output("core-plot", "figure"),
+            [Input("chart-dropdown", "value")])
+def update_chart(metric):
+    print(covid_core_df.columns)
+    covid_core_g = None
+    if metric == "core":
+        covid_core_g = covid_core_df.plot(kind='scatter',
+                                        x='total_deaths',
+                                        y='CORE Relative Frequency',
+                                        color='new_cases')
+    elif metric == "cantril":
+        covid_core_g = covid_core_df.plot(kind='scatter',
+                                        x='total_deaths',
+                                        y='cantril_ladder',
+                                        color='new_cases')
+    elif metric == "employment": 
+        covid_core_g = covid_core_df.plot(kind='scatter',
+                                        x='total_deaths',
+                                        y='employment_status',
+                                        color='new_cases')
+    elif metric == "phq4_4": 
+        covid_core_g = covid_core_df.plot(kind='scatter',
+                                        x='total_deaths',
+                                        y='PHQ4_4',
+                                        color='new_cases')
+    return covid_core_g
 
-        dff[AGGREGATE_BY] = pd.to_numeric(dff[AGGREGATE_BY], errors="coerce")
-        deaths_or_rate_by_fips = dff.groupby("County")[AGGREGATE_BY].sum()
-        deaths_or_rate_by_fips = deaths_or_rate_by_fips.sort_values()
-        # Only look at non-zero rows:
-        deaths_or_rate_by_fips = deaths_or_rate_by_fips[deaths_or_rate_by_fips > 0]
-        fig = deaths_or_rate_by_fips.iplot(
-            kind="bar", y=AGGREGATE_BY, title=title, asFigure=True
-        )
 
-        fig_layout = fig["layout"]
-        fig_data = fig["data"]
+@app.callback(
+    [Output("correlation-map", "figure"),
+    Output("stacked-plot", "figure")],
+    [Input("week-slider", "value")]
+)
+def display_map(week):
+    week_df_phq4_1 = df_phq4_1.loc[df_phq4_1["Week_Number"] == week]
+   
+    phq4_1_plot = week_df_phq4_1.plot(kind='bar',
+                            title="PHQ4_1 Response Frequency for week #" + str(week),
+                            x=["Not at all", "Several days", "More than half the days", "Nearly every day", "Prefer not to say"],
+                            y="PHQ1 Relative Frequency"
+                )
+    phq4_1_plot.update_xaxes(type='category')
 
-        fig_data[0]["text"] = deaths_or_rate_by_fips.values.tolist()
-        fig_data[0]["marker"]["color"] = "#2cfec1"
-        fig_data[0]["marker"]["opacity"] = 1
-        fig_data[0]["marker"]["line"]["width"] = 0
-        fig_data[0]["textposition"] = "outside"
-        fig_layout["paper_bgcolor"] = "#1f2630"
-        fig_layout["plot_bgcolor"] = "#1f2630"
-        fig_layout["font"]["color"] = "#2cfec1"
-        fig_layout["title"]["font"]["color"] = "#2cfec1"
-        fig_layout["xaxis"]["tickfont"]["color"] = "#2cfec1"
-        fig_layout["yaxis"]["tickfont"]["color"] = "#2cfec1"
-        fig_layout["xaxis"]["gridcolor"] = "#5b5b5b"
-        fig_layout["yaxis"]["gridcolor"] = "#5b5b5b"
-        fig_layout["margin"]["t"] = 75
-        fig_layout["margin"]["r"] = 50
-        fig_layout["margin"]["b"] = 100
-        fig_layout["margin"]["l"] = 50
+    df_combine_weekly = df_pqcore_freq.loc[df_pqcore_freq["Week_Number"] == week]
+    df_combine_weekly.drop(columns=['Week_Number'],
+                            inplace=True)
+    df_combine_weekly = df_combine_weekly.transpose()
+    df_combine_weekly.index.rename("QUESTION")
+    df_combine_weekly['Total'] = df_combine_weekly.sum(axis=1)
+    freq_dist_df_weekly_rel = df_combine_weekly.div(df_combine_weekly['Total'][0]).mul(100)
+    freq_dist_df_weekly_rel = freq_dist_df_weekly_rel.drop(['Total'],axis=1)
 
-        return fig
+    phq4_stacked_plot = freq_dist_df_weekly_rel.plot(kind='bar',
+                                title="distribution of PHQ4 responses for week #" + str(week),
+                                )
 
-    fig = dff.iplot(
-        kind="area",
-        x="Year",
-        y="Age Adjusted Rate",
-        text="County",
-        categories="County",
-        colors=[
-            "#1b9e77",
-            "#d95f02",
-            "#7570b3",
-            "#e7298a",
-            "#66a61e",
-            "#e6ab02",
-            "#a6761d",
-            "#666666",
-            "#1b9e77",
-        ],
-        vline=[year],
-        asFigure=True,
-    )
+    phq4_stacked_plot.update_xaxes(title="PHQ4 question")
+    # phq4_stacked_plot.update_yaxes(type='linear')
 
-    for i, trace in enumerate(fig["data"]):
-        trace["mode"] = "lines+markers"
-        trace["marker"]["size"] = 4
-        trace["marker"]["line"]["width"] = 1
-        trace["type"] = "scatter"
-        for prop in trace:
-            fig["data"][i][prop] = trace[prop]
+    return phq4_1_plot, phq4_stacked_plot
 
-    # Only show first 500 lines
-    fig["data"] = fig["data"][0:500]
-
-    fig_layout = fig["layout"]
-
-    # See plot.ly/python/reference
-    fig_layout["yaxis"]["title"] = "Age-adjusted death rate per county per year"
-    fig_layout["xaxis"]["title"] = ""
-    fig_layout["yaxis"]["fixedrange"] = True
-    fig_layout["xaxis"]["fixedrange"] = False
-    fig_layout["hovermode"] = "closest"
-    fig_layout["title"] = "<b>{0}</b> counties selected".format(len(fips))
-    fig_layout["legend"] = dict(orientation="v")
-    fig_layout["autosize"] = True
-    fig_layout["paper_bgcolor"] = "#1f2630"
-    fig_layout["plot_bgcolor"] = "#1f2630"
-    fig_layout["font"]["color"] = "#2cfec1"
-    fig_layout["xaxis"]["tickfont"]["color"] = "#2cfec1"
-    fig_layout["yaxis"]["tickfont"]["color"] = "#2cfec1"
-    fig_layout["xaxis"]["gridcolor"] = "#5b5b5b"
-    fig_layout["yaxis"]["gridcolor"] = "#5b5b5b"
-
-    if len(fips) > 500:
-        fig["layout"][
-            "title"
-        ] = "Age-adjusted death rate per county per year <br>(only 1st 500 shown)"
-
-    return fig
 
 
 if __name__ == "__main__":
+    # server.run(debug=True, port=8080)
     app.run_server(debug=True)

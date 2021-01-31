@@ -1,0 +1,5 @@
+runtime: python37
+entrypoint: gunicorn -b :$PORT app:server
+instance_class: B2
+manual_scaling:
+  instances: 1
